@@ -24,7 +24,7 @@ st.set_page_config(
 )
 
 # ── Constants ────────────────────────────────────────────────
-DATA_PATH = "data/"
+DATA_PATH = "data/data/"
 
 CITY_COORDS = {
     "Abuja":         (9.0765,  7.3986),
