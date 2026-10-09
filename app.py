@@ -109,10 +109,15 @@ def safe_load(filename, date_col="date"):
     path = DATA_PATH + filename
     if not os.path.exists(path):
         return pd.DataFrame()
-    df = pd.read_csv(path)
-    if date_col in df.columns:
-        df[date_col] = pd.to_datetime(df[date_col])
-    return df
+    try:
+        df = pd.read_csv(path)
+        if df.empty:
+            return pd.DataFrame()
+        if date_col in df.columns:
+            df[date_col] = pd.to_datetime(df[date_col])
+        return df
+    except Exception:
+        return pd.DataFrame()
 
 
 # ── Data loading ─────────────────────────────────────────────
