@@ -776,65 +776,195 @@ elif tab_choice == "🔮 Phase 2 — Scenario Comparison":
 
     st.divider()
 
-    # ── Price trajectory selector ─────────────────────────────
-    st.subheader("Forecast price trajectories")
-    ind_choice = st.selectbox(
-        "Select indicator",
-        ["Tomatoes_Fresh", "PMS_Price",
-         "Bus_Intercity", "Veg_Oil", "Rice"],
-        index=0,
+    # ── Prediction vs History summary ─────────────────────────
+    st.subheader("📈 LSTM prediction vs Phase 1 history")
+    st.markdown(
+        "The charts below are **predictions** — not historical "
+        "data. The LSTM inside each agent was trained on 90 months "
+        "of real NBS prices (Jan 2019 – Jun 2026). "
+        "In Phase 2 agents roll their LSTM forward one month at a "
+        "time to generate these forecasts. "
+        "No NBS data exists after June 2026 — every number "
+        "from July 2026 onward is LSTM-generated."
     )
 
-    fig_pr = go.Figure()
+    ph1c, ph2c, ph3c, ph4c = st.columns(4)
+    p1_migrations_count = len(p1_mig) if not p1_mig.empty else 0
+    p1_surplus_val = (
+        p1_tx["seller_surplus"].mean()
+        if not p1_tx.empty else 0
+    )
+    p2_base_mig = D.get("p2_baseline_migrations", pd.DataFrame())
+    p2_base_tx  = D.get("p2_baseline_transactions", pd.DataFrame())
+    p2_base_surplus = (
+        p2_base_tx["seller_surplus"].mean()
+        if not p2_base_tx.empty else 0
+    )
+    ph1c.metric(
+        "Phase 1 migrations (30 months — real)",
+        f"{p1_migrations_count:,}",
+        help="Actual trader movements Jan 2024–Jun 2026"
+    )
+    ph2c.metric(
+        "Baseline predicted (6 months — forecast)",
+        f"{len(p2_base_mig):,}",
+        delta=f"{len(p2_base_mig) - int(p1_migrations_count/5):+,} vs Phase 1 pace",
+        help="LSTM-predicted movements Jul–Dec 2026"
+    )
+    ph3c.metric(
+        "Phase 1 avg seller surplus (real)",
+        f"₦{p1_surplus_val:,.0f}",
+        help="Actual surplus from real NBS market clearing"
+    )
+    ph4c.metric(
+        "Baseline predicted surplus (forecast)",
+        f"₦{p2_base_surplus:,.0f}",
+        delta=f"₦{p2_base_surplus - p1_surplus_val:+,.0f} vs Phase 1",
+        help="LSTM-predicted surplus under no-shock scenario"
+    )
+
+    st.divider()
+
+    # ── Price trajectory selector — per city per scenario ─────
+    st.subheader("Forecast price trajectories — per city")
+    st.markdown(
+        "Select an indicator to see how each of the 6 cities "
+        "is predicted to move under each scenario. "
+        "Each line is one city. Line style = scenario."
+    )
+
+    sel_col1, sel_col2 = st.columns([2, 1])
+    with sel_col1:
+        ind_choice = st.selectbox(
+            "Select indicator",
+            ["Tomatoes_Fresh", "PMS_Price",
+             "Bus_Intercity", "Veg_Oil", "Rice"],
+            index=0,
+            help=(
+                "Tomatoes_Fresh: domestic food staple  |  "
+                "PMS_Price: petrol (city-level)  |  "
+                "Bus_Intercity: intercity fare  |  "
+                "Veg_Oil & Rice: import-sensitive commodities"
+            )
+        )
+    with sel_col2:
+        scenario_filter = st.selectbox(
+            "Select scenario to highlight",
+            ["All scenarios", "📗 Baseline",
+             "📙 MPR Tighten", "📕 FX Shock"],
+            index=0,
+        )
+
+    # Map display scenario to key
+    scenario_key_map = {
+        "All scenarios":  None,
+        "📗 Baseline":    "baseline",
+        "📙 MPR Tighten": "mpr_tighten",
+        "📕 FX Shock":    "fx_shock",
+    }
+    active_scenario = scenario_key_map[scenario_filter]
+
     line_styles = {
-        "baseline":    dict(dash="solid", width=3),
+        "baseline":    dict(dash="solid", width=2),
         "mpr_tighten": dict(dash="dash",  width=2),
         "fx_shock":    dict(dash="dot",   width=2),
     }
 
-    for scenario in ["baseline", "mpr_tighten", "fx_shock"]:
+    fig_pr = go.Figure()
+    scenarios_to_show = (
+        ["baseline", "mpr_tighten", "fx_shock"]
+        if active_scenario is None
+        else [active_scenario]
+    )
+
+    for scenario in scenarios_to_show:
         pdf = D.get(f"p2_{scenario}_prices", pd.DataFrame())
         if pdf.empty or ind_choice not in pdf.columns:
             continue
-        monthly = (
-            pdf.groupby("date")[ind_choice]
-            .mean()
-            .reset_index()
-        )
-        fig_pr.add_trace(go.Scatter(
-            x=monthly["date"],
-            y=monthly[ind_choice],
-            mode="lines+markers",
-            name=SCENARIO_LABELS[scenario],
-            line=dict(
-                color=SCENARIO_COLORS[scenario],
-                **line_styles[scenario],
-            ),
-            hovertemplate=(
-                f"{SCENARIO_LABELS[scenario]}<br>"
-                f"%{{x|%b %Y}}: ₦%{{y:,.0f}}"
-                f"<extra></extra>"
-            ),
-        ))
+        if "city" not in pdf.columns:
+            # Fallback: show average if city column missing
+            monthly = (
+                pdf.groupby("date")[ind_choice]
+                .mean().reset_index()
+            )
+            fig_pr.add_trace(go.Scatter(
+                x=monthly["date"],
+                y=monthly[ind_choice],
+                mode="lines+markers",
+                name=f"{SCENARIO_LABELS[scenario]} (avg)",
+                line=dict(
+                    color=SCENARIO_COLORS[scenario],
+                    **line_styles[scenario],
+                ),
+            ))
+        else:
+            # Show one line per city per scenario
+            for city in CITIES:
+                city_pdf = pdf[pdf["city"] == city]
+                if city_pdf.empty:
+                    continue
+                monthly = (
+                    city_pdf.groupby("date")[ind_choice]
+                    .mean().reset_index()
+                )
+                fig_pr.add_trace(go.Scatter(
+                    x=monthly["date"],
+                    y=monthly[ind_choice],
+                    mode="lines+markers",
+                    name=f"{city} — {SCENARIO_LABELS[scenario]}",
+                    line=dict(
+                        color=CITY_COLORS[city],
+                        **line_styles[scenario],
+                    ),
+                    hovertemplate=(
+                        f"<b>{city}</b> "
+                        f"({SCENARIO_LABELS[scenario]})<br>"
+                        f"%{{x|%b %Y}}: ₦%{{y:,.0f}}"
+                        f"<extra></extra>"
+                    ),
+                ))
 
     fig_pr.update_layout(
-        title=f"{ind_choice} — Forecast Jul–Dec 2026",
+        title=(
+            f"{ind_choice} forecast Jul–Dec 2026 — "
+            f"per city, per scenario  |  "
+            f"Line style: solid=Baseline  "
+            f"dashed=MPR Tighten  dotted=FX Shock"
+        ),
         xaxis_title="Month",
         yaxis_title="Price (₦)",
-        height=400,
+        height=480,
         hovermode="x unified",
-        legend=dict(orientation="h", yanchor="bottom", y=1.02),
+        legend=dict(
+            orientation="v",
+            x=1.01, y=1,
+            font=dict(size=9),
+        ),
     )
     st.plotly_chart(fig_pr, use_container_width=True)
+    st.caption(
+        f"Each coloured line = one city (colour matches city "
+        f"colour on the migration map).  "
+        f"Line style shows the scenario.  "
+        f"**{ind_choice}** prices shown averaged across "
+        f"each city's trader agents for that month."
+    )
 
     # ── Fuel and transport section ────────────────────────────
     st.divider()
-    st.subheader("⛽ Fuel and transport cost impact")
+    st.subheader(
+        "⛽ Fuel cost impact on PMS_Price and Bus_Intercity "
+        "— and how it suppresses inter-city migration"
+    )
     st.markdown(
-        "PMS_Price +₦100 and Bus_Intercity +₦60 applied in "
-        "MPR Tighten and FX Shock on top of LSTM forecast. "
-        "Higher bus fares reduce net spread signal, making "
-        "inter-city travel less profitable."
+        "In MPR Tighten and FX Shock scenarios, "
+        "**PMS_Price rises ₦100 per litre** and "
+        "**Bus_Intercity rises ₦60** (60% fuel pass-through) "
+        "across all 6 cities on top of the LSTM forecast.  \n"
+        "Higher bus fares reduce the net spread signal — "
+        "the profit a trader makes by sourcing from a cheaper "
+        "city minus the travel cost. When the travel cost rises, "
+        "fewer corridors are profitable and migration falls."
     )
 
     # PMS and Bus side-by-side trajectory
