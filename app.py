@@ -950,29 +950,85 @@ elif tab_choice == "🔮 Phase 2 — Scenario Comparison":
         f"each city's trader agents for that month."
     )
 
-    # ── Fuel and transport section ────────────────────────────
+    # ── Fuel section — clearly framed as part of scenarios ───
     st.divider()
-    st.subheader(
-        "⛽ Fuel cost impact on PMS_Price and Bus_Intercity "
-        "— and how it suppresses inter-city migration"
-    )
+    st.subheader("⛽ How fuel costs are built into the scenarios")
     st.markdown(
-        "In MPR Tighten and FX Shock scenarios, "
-        "**PMS_Price rises ₦100 per litre** and "
-        "**Bus_Intercity rises ₦60** (60% fuel pass-through) "
-        "across all 6 cities on top of the LSTM forecast.  \n"
-        "Higher bus fares reduce the net spread signal — "
-        "the profit a trader makes by sourcing from a cheaper "
-        "city minus the travel cost. When the travel cost rises, "
-        "fewer corridors are profitable and migration falls."
+        "Fuel price is **not a separate scenario** — it is a "
+        "component embedded inside both MPR Tighten and FX Shock.  \n\n"
+        "The economic logic is:  \n"
+        "- Under **MPR Tighten**, CBN raises interest rates "
+        "to cool inflation. In Nigeria, monetary tightening "
+        "historically coincides with fuel price pressure because "
+        "the CBN is responding to imported inflation — "
+        "so PMS_Price rises ₦100 and Bus_Intercity rises ₦60.  \n"
+        "- Under **FX Shock**, the naira falls 35% against the "
+        "dollar. Since petrol is an imported commodity priced in "
+        "dollars, naira depreciation immediately raises PMS costs — "
+        "so the same ₦100 fuel rise and ₦60 bus fare rise applies.  \n"
+        "- Under **Baseline**, no fuel shock — PMS stays at "
+        "whatever the LSTM forecast produces from recent trend.  \n\n"
+        "**Why this matters for migration:**  \n"
+        "Traders decide whether to travel to a cheaper source city "
+        "by comparing the price margin they can earn against the "
+        "travel cost. When Bus_Intercity rises ₦60, more corridors "
+        "become unprofitable and fewer traders travel — "
+        "so migration falls under both shock scenarios vs baseline."
     )
 
-    # PMS and Bus side-by-side trajectory
+    # Three-column comparison of fuel levels and migration effect
+    fc1, fc2, fc3 = st.columns(3)
+    fuel_summary = {}
+    for scenario in ["baseline", "mpr_tighten", "fx_shock"]:
+        pdf = D.get(f"p2_{scenario}_prices", pd.DataFrame())
+        mdf = D.get(f"p2_{scenario}_migrations", pd.DataFrame())
+        tdf = D.get(f"p2_{scenario}_transactions", pd.DataFrame())
+        if pdf.empty:
+            fuel_summary[scenario] = {}
+            continue
+        dec = pdf[pdf["date"] == pdf["date"].max()]
+        fuel_summary[scenario] = {
+            "pms":  dec["PMS_Price"].mean() if "PMS_Price" in dec.columns else 0,
+            "bus":  dec["Bus_Intercity"].mean() if "Bus_Intercity" in dec.columns else 0,
+            "mig":  len(mdf),
+            "tx":   len(tdf),
+        }
+
+    base_pms = fuel_summary.get("baseline", {}).get("pms", 0)
+    base_bus = fuel_summary.get("baseline", {}).get("bus", 0)
+    base_mig = fuel_summary.get("baseline", {}).get("mig", 0)
+
+    for col, scenario, label in zip(
+        [fc1, fc2, fc3],
+        ["baseline", "mpr_tighten", "fx_shock"],
+        ["📗 Baseline\n(no fuel shock)",
+         "📙 MPR Tighten\n(CBN tightening + fuel rise)",
+         "📕 FX Shock\n(naira fall + fuel rise)"]
+    ):
+        fs = fuel_summary.get(scenario, {})
+        with col:
+            st.markdown(f"**{label}**")
+            pms_val = fs.get("pms", 0)
+            bus_val = fs.get("bus", 0)
+            mig_val = fs.get("mig", 0)
+            pms_delta = f"+₦{pms_val - base_pms:,.0f}" if scenario != "baseline" else None
+            bus_delta = f"+₦{bus_val - base_bus:,.0f}" if scenario != "baseline" else None
+            mig_delta = f"{mig_val - base_mig:+,}" if scenario != "baseline" else None
+            st.metric("PMS Dec 2026", f"₦{pms_val:,.0f}", delta=pms_delta)
+            st.metric("Bus fare Dec 2026", f"₦{bus_val:,.0f}", delta=bus_delta)
+            st.metric("Migrations Jul–Dec", mig_val, delta=mig_delta,
+                      delta_color="inverse")
+
+    # PMS and Bus trajectory charts side by side
+    st.markdown(
+        "**PMS_Price and Bus_Intercity trajectories "
+        "Jul–Dec 2026 — Baseline vs shock scenarios:**"
+    )
     fig_ft = make_subplots(
         rows=1, cols=2,
         subplot_titles=[
-            "PMS_Price Jul–Dec 2026",
-            "Bus_Intercity Jul–Dec 2026",
+            "PMS_Price (₦ per litre) — all 6 cities avg",
+            "Bus_Intercity (₦ per trip) — all 6 cities avg",
         ],
     )
     for scenario in ["baseline", "mpr_tighten", "fx_shock"]:
@@ -984,11 +1040,7 @@ elif tab_choice == "🔮 Phase 2 — Scenario Comparison":
         ):
             if ind not in pdf.columns:
                 continue
-            monthly = (
-                pdf.groupby("date")[ind]
-                .mean()
-                .reset_index()
-            )
+            monthly = pdf.groupby("date")[ind].mean().reset_index()
             fig_ft.add_trace(
                 go.Scatter(
                     x=monthly["date"],
@@ -1000,6 +1052,10 @@ elif tab_choice == "🔮 Phase 2 — Scenario Comparison":
                         **line_styles[scenario],
                     ),
                     showlegend=(ci == 1),
+                    hovertemplate=(
+                        f"{SCENARIO_LABELS[scenario]}<br>"
+                        f"%{{x|%b %Y}}: ₦%{{y:,.0f}}<extra></extra>"
+                    ),
                 ),
                 row=1, col=ci,
             )
@@ -1011,48 +1067,25 @@ elif tab_choice == "🔮 Phase 2 — Scenario Comparison":
         legend=dict(orientation="h", yanchor="bottom", y=1.02),
     )
     st.plotly_chart(fig_ft, use_container_width=True)
-
-    # Fuel vs migration metrics
-    fuel_rows = []
-    for scenario in ["baseline", "mpr_tighten", "fx_shock"]:
-        pdf  = D.get(f"p2_{scenario}_prices", pd.DataFrame())
-        mdf  = D.get(f"p2_{scenario}_migrations", pd.DataFrame())
-        tdf  = D.get(f"p2_{scenario}_transactions", pd.DataFrame())
-        if pdf.empty:
-            continue
-        dec_df  = pdf[pdf["date"] == pdf["date"].max()]
-        avg_pms = (
-            dec_df["PMS_Price"].mean()
-            if "PMS_Price" in dec_df.columns else 0
-        )
-        avg_bus = (
-            dec_df["Bus_Intercity"].mean()
-            if "Bus_Intercity" in dec_df.columns else 0
-        )
-        away_pct = (
-            tdf["is_away_trade"].mean() * 100
-            if (not tdf.empty and
-                "is_away_trade" in tdf.columns) else 0
-        )
-        fuel_rows.append({
-            "Scenario":           SCENARIO_LABELS[scenario],
-            "PMS Dec 2026 (₦)":   f"₦{avg_pms:,.0f}",
-            "Bus Dec 2026 (₦)":   f"₦{avg_bus:,.0f}",
-            "Total migrations":   len(mdf),
-            "Total transactions": len(tdf),
-            "Away trades %":      f"{away_pct:.0f}%",
-        })
-
-    if fuel_rows:
-        st.dataframe(
-            pd.DataFrame(fuel_rows).set_index("Scenario"),
-            use_container_width=True,
-        )
+    st.caption(
+        "Baseline PMS stays at LSTM trend level.  "
+        "MPR Tighten and FX Shock both add ₦100 to PMS "
+        "and ₦60 to Bus_Intercity on top of the LSTM forecast.  "
+        "The gap between the blue (Baseline) and orange/purple "
+        "lines is the fuel shock effect on transport costs."
+    )
 
     # ── Scenario migration maps ───────────────────────────────
     st.divider()
-    st.subheader(
-        "Migration corridors by scenario — Jul–Dec 2026"
+    st.subheader("Where do traders move? Migration corridors by scenario")
+    st.markdown(
+        "These three maps show the **predicted** trader migration "
+        "corridors from July to December 2026 under each scenario.  \n"
+        "**How to read the maps:**  "
+        "Each dot is a city — hover to see its name.  "
+        "Each line is a corridor traders used to source goods.  "
+        "Thicker line = more trader movements along that corridor.  "
+        "The colour matches the scenario."
     )
 
     map_c1, map_c2, map_c3 = st.columns(3)
@@ -1064,12 +1097,26 @@ elif tab_choice == "🔮 Phase 2 — Scenario Comparison":
 
     for scenario, mcol in map_cols_map.items():
         with mcol:
-            st.markdown(
-                f"**{SCENARIO_LABELS[scenario]}**  \n"
-                f"*{SCENARIO_DESC[scenario]}*"
-            )
             mdf = D.get(
                 f"p2_{scenario}_migrations", pd.DataFrame()
+            )
+            tdf = D.get(
+                f"p2_{scenario}_transactions", pd.DataFrame()
+            )
+
+            # Top corridor for this scenario
+            top_corridor = "—"
+            if not mdf.empty:
+                tc = (
+                    mdf.groupby(["from_city","to_city"])
+                    .size().idxmax()
+                )
+                top_corridor = f"{tc[0]} → {tc[1]}"
+
+            st.markdown(
+                f"**{SCENARIO_LABELS[scenario]}**  \n"
+                f"*{SCENARIO_DESC[scenario]}*  \n"
+                f"Top corridor: **{top_corridor}**"
             )
 
             s_map = folium.Map(
@@ -1078,16 +1125,38 @@ elif tab_choice == "🔮 Phase 2 — Scenario Comparison":
                 tiles="CartoDB positron",
             )
 
+            # City markers with name labels
             for city, (lat, lon) in CITY_COORDS.items():
+                inbound = (
+                    len(mdf[mdf["to_city"] == city])
+                    if not mdf.empty else 0
+                )
                 folium.CircleMarker(
                     location=[lat, lon],
-                    radius=8,
+                    radius=9 + inbound // 5,
                     color="white",
-                    weight=1.5,
+                    weight=2,
                     fill=True,
                     fill_color=CITY_COLORS[city],
-                    fill_opacity=0.9,
-                    tooltip=city,
+                    fill_opacity=0.92,
+                    tooltip=folium.Tooltip(
+                        f"<b>{city}</b><br>"
+                        f"Inbound movements: {inbound}"
+                    ),
+                ).add_to(s_map)
+
+                # City name label
+                folium.Marker(
+                    location=[lat + 0.3, lon],
+                    icon=folium.DivIcon(
+                        html=(
+                            f'<div style="font-size:9px;'
+                            f'font-weight:bold;color:#212121;'
+                            f'white-space:nowrap">{city}</div>'
+                        ),
+                        icon_size=(110, 16),
+                        icon_anchor=(0, 0),
+                    ),
                 ).add_to(s_map)
 
             if not mdf.empty:
@@ -1109,25 +1178,39 @@ elif tab_choice == "🔮 Phase 2 — Scenario Comparison":
                             list(CITY_COORDS[src]),
                             list(CITY_COORDS[dst]),
                         ],
-                        weight=2 + (n / mx) * 6,
+                        weight=2 + (n / mx) * 7,
                         color=SCENARIO_COLORS[scenario],
-                        opacity=0.75,
-                        tooltip=f"{src}→{dst}: {n}",
+                        opacity=0.80,
+                        tooltip=folium.Tooltip(
+                            f"<b>{src} → {dst}</b><br>"
+                            f"Movements: {n}"
+                        ),
                     ).add_to(s_map)
 
             st_folium(
-                s_map, width=290, height=300,
+                s_map, width=290, height=310,
                 key=f"map_{scenario}",
             )
             st.caption(
                 f"Movements: {len(mdf):,}  |  "
-                f"Transactions: "
-                f"{len(D.get(f'p2_{scenario}_transactions', pd.DataFrame())):,}"
+                f"Transactions: {len(tdf):,}"
             )
 
     # ── Surplus comparison ────────────────────────────────────
     st.divider()
-    st.subheader("Transaction surplus comparison")
+    st.subheader(
+        "Transaction surplus comparison — "
+        "who earns more under each scenario?"
+    )
+    st.markdown(
+        "**Seller surplus** = profit the trader (intermediary) "
+        "earns per transaction after sourcing costs.  \n"
+        "**Buyer surplus** = saving the buyer makes versus the "
+        "full NBS market reference price.  \n"
+        "Higher seller surplus under FX Shock means traders who "
+        "can still source domestically capture larger margins "
+        "because import prices spiked 35% — widening the spread."
+    )
     surp_rows = []
     for scenario in ["baseline", "mpr_tighten", "fx_shock"]:
         tdf = D.get(
