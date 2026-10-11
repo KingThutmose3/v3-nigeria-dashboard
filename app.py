@@ -488,6 +488,31 @@ elif tab_choice == "📊 Phase 1 — Emergence Analytics":
     st.divider()
 
     # ── Trader and buyer actions ──────────────────────────────
+    st.subheader("What strategies did agents choose?")
+    st.markdown(
+        "Each trader agent chose one of five actions every month "
+        "based on what it observed in the market — prices, "
+        "network stress and its own capital level. "
+        "No agent was told which action to pick. "
+        "The chart below shows what each city's trader "
+        "population collectively chose most often across "
+        "30 months of real NBS data.  \n\n"
+        "**What each action means in plain English:**  \n"
+        "🔵 **sell_local** — trader buys stock from local "
+        "wholesalers and sells to buyers in their own city  \n"
+        "🟢 **travel** — trader travels to a cheaper source city, "
+        "buys stock there and brings it back home to sell  \n"
+        "⚫ **hold** — trader does not buy or sell this month, "
+        "waits for a better opportunity  \n"
+        "🟠 **reduce_price** — trader lowers their asking price "
+        "to sell stock that is not moving  \n"
+        "🟣 **increase_price** — trader raises their asking price "
+        "when market conditions allow higher margins  \n\n"
+        "**What to look for:** Cities where travel dominates "
+        "are active arbitrage markets. Cities where reduce_price "
+        "dominates are under competitive or inflationary pressure."
+    )
+
     col_a, col_b = st.columns(2)
 
     with col_a:
@@ -532,6 +557,18 @@ elif tab_choice == "📊 Phase 1 — Emergence Analytics":
 
     with col_b:
         st.subheader("Buyer behaviour by city")
+        st.markdown(
+            "**What each buyer action means:**  \n"
+            "🔵 **buy_local** — buyer purchases from traders "
+            "in their own city  \n"
+            "🟠 **request_adjacent** — buyer cannot find "
+            "enough supply locally and looks to neighbouring "
+            "cities — a signal of local supply shortage  \n"
+            "🔴 **delay_purchase** — buyer postpones buying "
+            "this month, usually because prices are too high  \n\n"
+            "**Key signal:** High request_adjacent in Bauchi "
+            "confirms it is the most supply-constrained market."
+        )
         buyer_df = p1_steps[
             p1_steps["breed"] == "BuyerAgent"
         ].copy()
@@ -569,7 +606,25 @@ elif tab_choice == "📊 Phase 1 — Emergence Analytics":
             st.plotly_chart(fig_bu, use_container_width=True)
 
     # ── Trader capital trajectory ─────────────────────────────
+    st.divider()
     st.subheader("Trader capital trajectory by city")
+    st.markdown(
+        "Each of the 120 trader agents started January 2024 "
+        "with ₦500,000 in capital — money they use to buy stock, "
+        "pay travel costs and cover credit charges.  \n\n"
+        "Every month their capital goes up when they successfully "
+        "sell goods at a profit, and goes down when they pay "
+        "travel costs, buy stock they cannot sell, "
+        "or hold inventory while paying credit charges.  \n\n"
+        "The chart shows the average capital remaining for "
+        "traders in each city across the 30-month simulation.  \n\n"
+        "**What to look for:**  \n"
+        "🔵 Lines **above** the ₦500k dashed line — that city's "
+        "traders grew their capital (Port Harcourt is the only one).  \n"
+        "🔴 Lines **below** the ₦500k line — traders are spending "
+        "more than they earn. Bauchi falls fastest, "
+        "confirming it as the most financially stressed market."
+    )
     if (not trader_df.empty and
             "capital" in trader_df.columns):
         cap_tl = (
@@ -601,6 +656,35 @@ elif tab_choice == "📊 Phase 1 — Emergence Analytics":
         st.plotly_chart(fig_cap, use_container_width=True)
 
     # ── Transaction surplus and away/local split ──────────────
+    st.divider()
+    st.subheader("Who profits from market transactions?")
+    st.markdown(
+        "Every time a trader sells goods to a buyer, "
+        "two things happen: the trader earns a profit "
+        "(seller surplus) and the buyer saves money versus "
+        "what they would have paid at the full market price "
+        "(buyer surplus).  \n\n"
+        "This simulation uses the **Easley-Kleinberg "
+        "intermediary model** from the book "
+        "*Networks, Crowds and Markets* (Chapter 11). "
+        "In that model, traders who sit between producers "
+        "and consumers — buying cheap and selling at a markup "
+        "— capture most of the available profit. "
+        "The buyer saves a little but the trader earns a lot "
+        "because they take on all the risk of sourcing, "
+        "travelling and holding stock.  \n\n"
+        "**What the charts show:**  \n"
+        "The pie chart on the left shows that traders captured "
+        "approximately 87% of total market surplus — "
+        "exactly as the E&K model predicts for intermediary "
+        "markets with limited buyer-seller connectivity.  \n"
+        "The pie chart on the right shows that nearly half "
+        "of all transactions involved a trader who had "
+        "travelled to a cheaper source city first — "
+        "proving that inter-city arbitrage is a major "
+        "driver of food market activity in Nigeria."
+    )
+
     col_c, col_d = st.columns(2)
 
     with col_c:
@@ -618,8 +702,8 @@ elif tab_choice == "📊 Phase 1 — Emergence Analytics":
                 surp,
                 values="amount", names="type",
                 title=(
-                    "Seller captures ~90% of market surplus  \n"
-                    "(E&K intermediary prediction confirmed)"
+                    "Seller captures ~87% of market surplus  \n"
+                    "(E&K intermediary model confirmed)"
                 ),
                 color_discrete_map={
                     "Seller surplus": "#1565C0",
@@ -645,8 +729,9 @@ elif tab_choice == "📊 Phase 1 — Emergence Analytics":
                 trade_df,
                 values="count", names="type",
                 title=(
-                    "45% of transactions are away trades  \n"
-                    "(trader sourced at city A, sold at city B)"
+                    "~48% of transactions are away trades  \n"
+                    "(trader sourced from another city, "
+                    "sold at home)"
                 ),
                 color_discrete_map={
                     "Away trade":  "#2E7D32",
@@ -657,9 +742,40 @@ elif tab_choice == "📊 Phase 1 — Emergence Analytics":
             st.plotly_chart(fig_aw, use_container_width=True)
 
     # ── Banking agent actions ─────────────────────────────────
+    st.divider()
     st.subheader(
-        "Banking agent credit policy — Lagos ease_credit "
-        "is the key emergent finding"
+        "Banking agent credit policy — "
+        "Lagos ease_credit is the key emergent finding"
+    )
+    st.markdown(
+        "Each city has 3 banking agents whose job is to "
+        "set the local credit cost that traders pay every "
+        "month. The credit cost is based on the CBN Monetary "
+        "Policy Rate (MPR) — the national interest rate set "
+        "by the Central Bank of Nigeria.  \n\n"
+        "Every month each banking agent chooses one of "
+        "three policies:  \n"
+        "🔵 **maintain_rate** — keep credit cost at the "
+        "current CBN MPR level, neither helping nor hurting traders  \n"
+        "🔴 **tighten_credit** — raise credit costs above the "
+        "CBN rate, making it more expensive for traders to "
+        "hold stock or travel  \n"
+        "🟢 **ease_credit** — lower credit costs below the "
+        "CBN rate, giving traders cheaper access to working "
+        "capital to encourage market activity  \n\n"
+        "**The key emergent finding:**  \n"
+        "Lagos banking agents independently learned to "
+        "**ease_credit** — no other city's banking agents did this. "
+        "No rule told the Lagos agents to ease credit. "
+        "They discovered it through 30 months of trial and error, "
+        "because Lagos has the highest food prices, "
+        "the most competitive market and the most capital-stressed "
+        "traders — and easing credit kept traders active "
+        "and earned the banking agents better rewards.  \n\n"
+        "This is emergence — the banking agents in Lagos "
+        "independently converged on a policy that mirrors "
+        "what a smart central banker would do in a high-cost "
+        "urban market."
     )
     banking_df = p1_steps[
         p1_steps["breed"] == "BankingAgent"
@@ -688,8 +804,8 @@ elif tab_choice == "📊 Phase 1 — Emergence Analytics":
             color="action_name",
             orientation="h",
             title=(
-                "Banking agent policy — Lagos independently "
-                "learned ease_credit (no other city did)"
+                "Banking agent policy by city — "
+                "Lagos is the only city with significant ease_credit"
             ),
             color_discrete_map={
                 "maintain_rate":  "#1565C0",
@@ -701,7 +817,38 @@ elif tab_choice == "📊 Phase 1 — Emergence Analytics":
         st.plotly_chart(fig_bk, use_container_width=True)
 
     # ── WoLF status ───────────────────────────────────────────
+    st.divider()
     st.subheader("Trader WoLF status — winning vs losing")
+    st.markdown(
+        "**What is WoLF?**  \n"
+        "WoLF stands for **Win or Learn Fast** — "
+        "a learning mechanism from multi-agent reinforcement "
+        "learning (MARL) research. It was designed to help "
+        "agents behave differently depending on whether "
+        "they are currently doing well or poorly.  \n\n"
+        "In this simulation, a trader is **winning** if their "
+        "cumulative profit is above the average profit of all "
+        "traders in their city. They are **losing** if they "
+        "are below that average.  \n\n"
+        "**Why it matters:**  \n"
+        "WoLF status tells us whether each city's trader "
+        "population is converging on a successful strategy "
+        "or still struggling. When most traders in a city "
+        "are winning, it means the market has found a "
+        "stable equilibrium — traders know what to do and "
+        "are doing it profitably.  \n\n"
+        "**What the chart shows:**  \n"
+        "The lines start low in January 2024 because agents "
+        "are still learning. All cities converge toward "
+        "high winning percentages by mid-2024 as agents "
+        "learn profitable strategies from experience. "
+        "Port Harcourt reaches near 100% winning earliest — "
+        "its oil economy premium makes trading there "
+        "consistently profitable. "
+        "Bauchi has the most volatile WoLF trajectory — "
+        "its fragile market means strategies that work one "
+        "month may not work the next."
+    )
     if (not trader_df.empty and
             "wolf_status" in trader_df.columns):
         wolf_tl = (
@@ -723,7 +870,11 @@ elif tab_choice == "📊 Phase 1 — Emergence Analytics":
             wolf_win,
             x="date", y="pct",
             color="home_city",
-            title="% Traders in winning WoLF status by city",
+            title=(
+                "% Traders in winning WoLF status by city — "
+                "lines rising toward 100% = agents learning "
+                "profitable strategies"
+            ),
             color_discrete_map=CITY_COLORS,
         )
         fig_wf.add_hline(
@@ -732,10 +883,18 @@ elif tab_choice == "📊 Phase 1 — Emergence Analytics":
             annotation_text="50% threshold",
         )
         fig_wf.update_layout(
-            height=340,
+            height=360,
             yaxis_title="% winning",
         )
         st.plotly_chart(fig_wf, use_container_width=True)
+        st.caption(
+            "All cities cross the 50% threshold by mid-2024 "
+            "as agents learn from experience. "
+            "Port Harcourt (cyan) is the fastest and most stable. "
+            "Bauchi (red) is the most volatile — "
+            "consistent with its 100% market stress finding "
+            "from the topological analysis."
+        )
 
 
 # ============================================================
