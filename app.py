@@ -364,31 +364,48 @@ if tab_choice == "📍 Phase 1 — Migration Map":
         st_folium(nigeria_map, width=680, height=500)
 
     with info_col:
-        st.markdown("#### Summary metrics")
-        n_uniq = (
-            p1_mig
-            .groupby(["from_city", "to_city"])
-            .ngroups
-            if not p1_mig.empty else 0
+        # All metrics now use mig_f (filtered by slider)
+        period_label = (
+            "All 30 months"
+            if show_all
+            else selected_month
+        )
+        st.markdown(f"#### Summary metrics — {period_label}")
+
+        n_mov   = len(mig_f)
+        n_uniq  = (
+            mig_f.groupby(["from_city","to_city"]).ngroups
+            if not mig_f.empty else 0
         )
         top_dest = (
-            p1_mig["to_city"].value_counts().index[0]
-            if not p1_mig.empty else "—"
+            mig_f["to_city"].value_counts().index[0]
+            if not mig_f.empty else "—"
         )
         top_src = (
-            p1_mig["from_city"].value_counts().index[0]
-            if not p1_mig.empty else "—"
+            mig_f["from_city"].value_counts().index[0]
+            if not mig_f.empty else "—"
         )
 
-        st.metric("Total movements",  f"{len(p1_mig):,}")
-        st.metric("Unique corridors", n_uniq)
+        # Delta vs full-period average for single-month view
+        avg_monthly = len(p1_mig) / 30 if not show_all else None
+        mov_delta = (
+            f"{n_mov - avg_monthly:+.0f} vs monthly avg"
+            if avg_monthly is not None else None
+        )
+
+        st.metric(
+            "Movements this period",
+            f"{n_mov:,}",
+            delta=mov_delta,
+        )
+        st.metric("Active corridors", n_uniq)
         st.metric("Top destination",  top_dest)
-        st.metric("Top source",       top_src)
-        if (not p1_mig.empty and
-                "spread" in p1_mig.columns):
+        st.metric("Top source city",  top_src)
+        if (not mig_f.empty and
+                "spread" in mig_f.columns):
             st.metric(
                 "Avg spread signal",
-                f"{p1_mig['spread'].mean():.3f}"
+                f"{mig_f['spread'].mean():.3f}"
             )
 
         st.divider()
@@ -406,12 +423,26 @@ if tab_choice == "📍 Phase 1 — Migration Map":
             "🔴 Weak spread (< 0.15)"
         )
 
-    # ── Corridor bar chart ────────────────────────────────────
+    # ── Corridor bar chart — dynamic with slider ──────────────
     st.divider()
-    st.subheader("Top migration corridors — Phase 1 total")
-    if not p1_mig.empty:
+
+    # Chart title reflects current filter
+    chart_title = (
+        "Top migration corridors — all 30 months"
+        if show_all
+        else f"Top migration corridors — {selected_month}"
+    )
+    st.subheader(chart_title)
+    st.markdown(
+        "This chart updates with the month slider above.  \n"
+        "Each bar shows how many trader movements happened "
+        "on that corridor in the selected period.  \n"
+        "Tick **Show all months** to see the full 30-month total."
+    )
+
+    if not mig_f.empty:
         all_corr = (
-            p1_mig
+            mig_f
             .groupby(["from_city", "to_city"])
             .size()
             .reset_index(name="movements")
@@ -424,11 +455,12 @@ if tab_choice == "📍 Phase 1 — Migration Map":
         )
         fig_corr = px.bar(
             all_corr,
-            x="movements", y="corridor",
+            x="movements",
+            y="corridor",
             orientation="h",
             color="movements",
             color_continuous_scale="Viridis",
-            title="Trader movements by corridor (all 30 months)",
+            title=chart_title,
         )
         fig_corr.update_layout(
             height=420,
@@ -436,6 +468,12 @@ if tab_choice == "📍 Phase 1 — Migration Map":
             showlegend=False,
         )
         st.plotly_chart(fig_corr, use_container_width=True)
+    else:
+        st.info(
+            f"No movements recorded for {selected_month} "
+            f"above the minimum threshold of {min_mov}. "
+            "Try lowering the Min movements slider."
+        )
 
 
 # ============================================================
